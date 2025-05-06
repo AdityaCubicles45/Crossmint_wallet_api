@@ -1,22 +1,44 @@
 # Xade Wallet Service
 
-A serverless API service for managing EVM smart wallets and transactions.
+A secure serverless wallet management service built with AWS Lambda, providing secure key storage and management capabilities.
+
+## Features
+
+- 🔐 Secure wallet creation and management
+- 🔑 Delegated key generation and storage
+- 🔒 AWS KMS encryption for all sensitive data
+- 📦 Serverless architecture using AWS Lambda
+- 🔐 API key authentication
+- 💾 DynamoDB for secure key storage
 
 ## Prerequisites
 
 - Node.js 20.x or later
 - AWS CLI configured with appropriate credentials
-- Serverless Framework installed globally (`npm install -g serverless`)
+- Serverless Framework installed globally
+- An AWS account with appropriate permissions
 
-## Environment Setup
+## Environment Variables
 
-1. Create a `.env.production` file with the following variables:
+Create a `.env.dev` file with the following variables:
+
 ```env
 CROSSMINT_API_KEY=your_crossmint_api_key
 ADMIN_WALLET_ADDRESS=your_admin_wallet_address
 WALLET_ADDRESS=your_wallet_address
 DELEGATED_KEY_ADDRESS=your_delegated_key_address
+KMS_KEY_ID=your_kms_key_id
+KEYS_TABLE_NAME=your_dynamodb_table_name
+API_KEY=your_api_gateway_key
 DELEGATED_KEY_PRIVATE_KEY=your_delegated_key_private_key
+```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd xade-wallet-service
 ```
 
 2. Install dependencies:
@@ -24,86 +46,133 @@ DELEGATED_KEY_PRIVATE_KEY=your_delegated_key_private_key
 npm install
 ```
 
-## Testing the Service
-
-### Option 1: Step-by-Step Testing
-
-Use the `test-wallet-flow.js` script to test the complete wallet and transaction flow:
-
+3. Deploy to AWS:
 ```bash
-node test-wallet-flow.js
-```
-
-This script will:
-1. Validate your environment variables
-2. Create a new wallet
-3. Create a transaction
-4. Sign the transaction
-5. Approve the transaction
-6. Submit the transaction to the blockchain
-
-Each step is clearly logged, and any errors are caught and displayed with detailed information.
-
-### Option 2: Individual Endpoint Testing
-
-You can test individual endpoints using the `test-api.js` script:
-
-```bash
-node test-api.js
-```
-
-This script tests each endpoint separately:
-- `/wallet` - Create a new wallet
-- `/transaction/create` - Create a new transaction
-- `/transaction/sign` - Sign a transaction
-- `/transaction/approve` - Approve a transaction
-- `/transactions/{transactionId}/submit` - Submit a transaction to the blockchain
-- `/keys` - Manage wallet keys
-
-### Troubleshooting
-
-If you encounter errors:
-
-1. Check your environment variables:
-```bash
-node -e "require('dotenv').config(); console.log(process.env)"
-```
-
-2. Verify your Crossmint API key is valid and has the necessary permissions
-
-3. Ensure your wallet addresses are in the correct format (0x followed by 40 hexadecimal characters)
-
-4. Check the AWS CloudWatch logs for detailed error information:
-```bash
-serverless logs -f functionName --stage prod
+serverless deploy
 ```
 
 ## API Endpoints
 
-- `POST /wallet` - Create a new wallet
-- `POST /transaction/create` - Create a new transaction
-- `POST /transaction/sign` - Sign a transaction
-- `POST /transaction/approve` - Approve a transaction
-- `POST /transactions/{transactionId}/submit` - Submit a transaction to the blockchain
-- `POST /keys` - Manage wallet keys
+### Key Management
 
-## Deployment
+#### Create Wallet
+```http
+POST /keys
+Content-Type: application/json
+x-api-key: your-api-key
 
-Deploy to production:
-```bash
-npm run deploy:prod
+{
+    "action": "createWallet",
+    "adminWalletAddress": "0x..."
+}
 ```
 
-Deploy to staging:
-```bash
-npm run deploy:staging
+#### Store Delegated Key
+```http
+POST /keys
+Content-Type: application/json
+x-api-key: your-api-key
+
+{
+    "action": "storeDelegatedKey",
+    "delegatedKeyAddress": "0x...",
+    "delegatedKeyPrivateKey": "..."
+}
 ```
 
-## Development
+#### Get Delegated Key
+```http
+POST /keys
+Content-Type: application/json
+x-api-key: your-api-key
 
-Start the local development server:
-```bash
-npm run dev
+{
+    "action": "getDelegatedKey",
+    "address": "0x..."
+}
 ```
 
-This will start the serverless offline server at `http://localhost:4000`. 
+## Testing
+
+Run the test suite:
+```bash
+node test.js
+```
+
+The test suite verifies:
+1. Wallet creation
+2. Delegated key storage
+3. Key retrieval and verification
+
+## Security Features
+
+- **AWS KMS Encryption**: All sensitive data is encrypted using AWS KMS
+- **API Key Authentication**: All endpoints require valid API key
+- **Secure Storage**: Keys are stored in DynamoDB with encryption
+- **Environment Variables**: Sensitive configuration is managed through environment variables
+- **IAM Roles**: Least privilege access through IAM roles
+
+## Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   API       │     │   Lambda    │     │   DynamoDB  │
+│  Gateway    │────▶│  Function   │────▶│   Table     │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                   │                   ▲
+       │                   │                   │
+       │                   ▼                   │
+       │            ┌─────────────┐           │
+       └───────────▶│    KMS      │───────────┘
+                    └─────────────┘
+```
+
+## AWS Resources
+
+- **Lambda Functions**:
+  - `keyManager`: Main key management function
+  - `createWallet`: Wallet creation function
+  - `storeDelegatedKey`: Delegated key storage function
+
+- **DynamoDB**:
+  - Table: `Xade_Crossmint`
+  - Primary Key: `address` (String)
+
+- **KMS**:
+  - Customer managed key for encryption
+
+- **API Gateway**:
+  - REST API with API key authentication
+  - Private endpoints
+
+## Error Handling
+
+The service includes comprehensive error handling:
+- Input validation
+- API key verification
+- KMS encryption/decryption errors
+- DynamoDB operation errors
+- Proper error responses with status codes
+
+## Logging
+
+- CloudWatch Logs for all Lambda functions
+- Detailed error logging
+- Request/response logging
+- Operation status logging
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Support
+
+For support, please open an issue in the repository or contact the development team. 
