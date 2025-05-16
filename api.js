@@ -149,7 +149,35 @@ const createResponse = (statusCode, data) => ({
 class KeyManager {
     constructor() {
         this.tableName = process.env.SUPABASE_WALLETS_TABLE || 'wallets';
+        this.kms = new AWS.KMS({ region: process.env.AWS_REGION });
         log('info', 'KeyManager initialized', { tableName: this.tableName });
+    }
+
+    async encryptWithKMS(plaintext) {
+        try {
+            const params = {
+                KeyId: process.env.KMS_KEY_ID,
+                Plaintext: Buffer.from(plaintext)
+            };
+            const result = await this.kms.encrypt(params).promise();
+            return result.CiphertextBlob.toString('base64');
+        } catch (error) {
+            log('error', 'Error encrypting with KMS', { error: error.message });
+            throw new Error('Failed to encrypt data with KMS');
+        }
+    }
+
+    async decryptWithKMS(ciphertextBase64) {
+        try {
+            const params = {
+                CiphertextBlob: Buffer.from(ciphertextBase64, 'base64')
+            };
+            const result = await this.kms.decrypt(params).promise();
+            return result.Plaintext.toString('utf8');
+        } catch (error) {
+            log('error', 'Error decrypting with KMS', { error: error.message });
+            throw new Error('Failed to decrypt data with KMS');
+        }
     }
 
     async createWallet(adminWalletAddress) {
@@ -157,32 +185,31 @@ class KeyManager {
             log('info', 'Creating new wallet...');
             // Generate new wallet
             const wallet = ethers.Wallet.createRandom();
-            const walletAddress = wallet.address;
+            const walletAddress = wallet.address.toLowerCase();
             const privateKey = wallet.privateKey;
 
             // Generate delegated key
             const delegatedWallet = ethers.Wallet.createRandom();
-            const delegatedKeyAddress = delegatedWallet.address;
+            const delegatedKeyAddress = delegatedWallet.address.toLowerCase();
             const delegatedKeyPrivateKey = delegatedWallet.privateKey;
 
             // Encrypt both keys using KMS
             log('info', 'Encrypting keys with KMS...');
-            const [walletEncryptResult, delegatedEncryptResult] = await Promise.all([
-                kms.encrypt({
-                    KeyId: process.env.KMS_KEY_ID,
-                    Plaintext: Buffer.from(privateKey)
-                }).promise(),
-                kms.encrypt({
-                    KeyId: process.env.KMS_KEY_ID,
-                    Plaintext: Buffer.from(delegatedKeyPrivateKey)
-                }).promise()
+            const [encryptedWalletKey, encryptedDelegatedKey] = await Promise.all([
+                this.encryptWithKMS(privateKey),
+                this.encryptWithKMS(delegatedKeyPrivateKey)
             ]);
 
-            const encryptedWalletKey = walletEncryptResult.CiphertextBlob.toString('base64');
-            const encryptedDelegatedKey = delegatedEncryptResult.CiphertextBlob.toString('base64');
-
-            // Store non-sensitive metadata in Supabase
-            log('info', 'Storing wallet metadata in Supabase...');
+            // Store only non-sensitive metadata in Supabase
+            log('info', 'Supabase insert payload', {
+                address: walletAddress,
+                adminWalletAddress,
+                encryptedWalletKey,
+                encryptedDelegatedKey,
+                delegatedKeyAddress,
+                createdAt: new Date().toISOString(),
+                type: 'wallet'
+            });
             const { error } = await supabase.from(this.tableName).insert([
                 {
                     address: walletAddress,
@@ -194,7 +221,10 @@ class KeyManager {
                     type: 'wallet'
                 }
             ]);
-            if (error) throw new Error('Supabase insert error: ' + error.message);
+            if (error) {
+                log('error', 'Supabase insert error', { error: error.message });
+                throw new Error('Supabase insert error: ' + error.message);
+            }
 
             log('info', 'Wallet created and metadata stored successfully', {
                 walletAddress,
@@ -223,22 +253,22 @@ class KeyManager {
             const { data, error } = await supabase
                 .from(this.tableName)
                 .select('encryptedDelegatedKey,delegatedKeyAddress')
-                .eq('address', address)
+                .eq('delegatedKeyAddress', address.toLowerCase())
                 .single();
+            
             if (error || !data || !data.encryptedDelegatedKey) {
                 throw new Error('Delegated key not found');
             }
+
             // Decrypt the key using KMS
             log('info', 'Decrypting key with KMS...');
-            const decryptResult = await kms.decrypt({
-                CiphertextBlob: Buffer.from(data.encryptedDelegatedKey, 'base64'),
-                KeyId: process.env.KMS_KEY_ID
-            }).promise();
+            const delegatedKeyPrivateKey = await this.decryptWithKMS(data.encryptedDelegatedKey);
+            
             log('info', 'Key decrypted successfully');
             return {
                 success: true,
                 delegatedKeyAddress: data.delegatedKeyAddress,
-                delegatedKeyPrivateKey: decryptResult.Plaintext.toString('utf8')
+                delegatedKeyPrivateKey
             };
         } catch (error) {
             log('error', 'Error retrieving delegated key:', error);
@@ -248,7 +278,139 @@ class KeyManager {
             };
         }
     }
+
+    async getWalletKey(address) {
+        try {
+            log('info', 'Getting wallet key for address:', address);
+            // Fetch encrypted key from Supabase
+            const { data, error } = await supabase
+                .from(this.tableName)
+                .select('encryptedWalletKey')
+                .eq('address', address)
+                .single();
+            
+            if (error || !data || !data.encryptedWalletKey) {
+                throw new Error('Wallet key not found');
+            }
+
+            // Decrypt the key using KMS
+            log('info', 'Decrypting key with KMS...');
+            const walletPrivateKey = await this.decryptWithKMS(data.encryptedWalletKey);
+            
+            log('info', 'Key decrypted successfully');
+            return {
+                success: true,
+                walletPrivateKey
+            };
+        } catch (error) {
+            log('error', 'Error retrieving wallet key:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
 }
+
+// Add Li.Fi API configuration
+const LIFI_API_URL = 'https://li.quest/v1';
+
+// Add Li.Fi API helper functions
+const generateUnsignedTransaction = async (params) => {
+    try {
+        log('info', 'Generating unsigned transaction with Li.Fi', { params });
+        // Build query string for GET request
+        const query = new URLSearchParams({
+            fromChain: params.fromChain || '137',
+            toChain: params.toChain || '137',
+            fromToken: params.fromToken,
+            toToken: params.toToken,
+            fromAmount: params.amount,
+            fromAddress: params.fromAddress,
+            toAddress: params.toAddress,
+            slippage: params.slippage || 0.5
+        }).toString();
+        const url = `${LIFI_API_URL}/quote?${query}`;
+        const response = await axiosInstance.get(url);
+        if (!response.data || !response.data.transactionRequest) {
+            throw new Error('Invalid response from Li.Fi API');
+        }
+        log('info', 'Generated unsigned transaction', {
+            fromToken: params.fromToken,
+            toToken: params.toToken,
+            amount: params.amount
+        });
+        return {
+            success: true,
+            unsignedTx: response.data.transactionRequest,
+            quote: response.data
+        };
+    } catch (error) {
+        log('error', 'Error generating unsigned transaction', {
+            error: error.message,
+            response: error.response?.data
+        });
+        throw new Error('Failed to generate unsigned transaction: ' + error.message);
+    }
+};
+
+// Add new endpoint handler for Li.Fi transactions
+const createLiFiTransaction = async (event) => {
+    try {
+        log('info', 'Creating Li.Fi transaction...');
+        const body = JSON.parse(event.body);
+        const {
+            fromToken,
+            toToken,
+            amount,
+            fromAddress,
+            toAddress,
+            fromChain,
+            toChain,
+            slippage
+        } = body;
+
+        if (!fromToken || !toToken || !amount || !fromAddress || !toAddress) {
+            return createResponse(400, {
+                success: false,
+                error: 'Missing required parameters'
+            });
+        }
+
+        if (!validateWalletAddress(fromAddress) || !validateWalletAddress(toAddress)) {
+            return createResponse(400, {
+                success: false,
+                error: 'Invalid wallet address format'
+            });
+        }
+
+        const unsignedTx = await generateUnsignedTransaction({
+            fromToken,
+            toToken,
+            amount,
+            fromAddress,
+            toAddress,
+            fromChain,
+            toChain,
+            slippage
+        });
+
+        return createResponse(200, {
+            success: true,
+            unsignedTx: unsignedTx.unsignedTx,
+            quote: unsignedTx.quote
+        });
+    } catch (error) {
+        log('error', 'Error creating Li.Fi transaction', {
+            error: error.message,
+            response: error.response?.data
+        });
+        return createResponse(error.response?.status || 500, {
+            success: false,
+            error: error.response?.data?.message || error.message
+        });
+    }
+};
 
 // API Handlers
 const createWallet = async (event) => {
@@ -692,13 +854,43 @@ const signAndSubmitTransaction = async (event) => {
             throw new Error(delegatedKey.error);
         }
 
+        // Get the current nonce from the network
+        const provider = new ethers.providers.JsonRpcProvider(currentConfig.rpcUrl);
+        const nonce = await provider.getTransactionCount(delegatedKey.delegatedKeyAddress, 'latest');
+        
+        // Update transaction with correct nonce
+        const updatedTx = {
+            ...unsignedTx,
+            nonce: nonce
+        };
+
         // Sign the transaction
         const wallet = new ethers.Wallet(delegatedKey.delegatedKeyPrivateKey);
-        const signedTx = await wallet.signTransaction(unsignedTx);
+        const signedTx = await wallet.signTransaction(updatedTx);
 
         // Submit the signed transaction to the blockchain
-        const provider = new ethers.providers.JsonRpcProvider(currentConfig.rpcUrl);
         const txResponse = await provider.sendTransaction(signedTx);
+
+        // Store transaction details in Supabase
+        const { error: insertError } = await supabase
+            .from('transactions')
+            .insert([{
+                hash: txResponse.hash,
+                walletAddress: walletAddress.toLowerCase(),
+                delegatedKeyAddress: delegatedKey.delegatedKeyAddress.toLowerCase(),
+                to: unsignedTx.to,
+                value: unsignedTx.value,
+                data: unsignedTx.data,
+                chainId: unsignedTx.chainId,
+                nonce: nonce,
+                status: 'submitted',
+                createdAt: new Date().toISOString()
+            }]);
+
+        if (insertError) {
+            log('error', 'Error storing transaction in Supabase', { error: insertError.message });
+            // Don't throw here, as the transaction was successful on-chain
+        }
 
         return createResponse(200, {
             success: true,
@@ -752,6 +944,9 @@ exports.handler = async (event) => {
         }
         if (path === '/transaction/sign-and-submit' && method === 'POST') {
             return await signAndSubmitTransaction(event);
+        }
+        if (path === '/transaction/lifi' && method === 'POST') {
+            return await createLiFiTransaction(event);
         }
 
         return createResponse(404, {

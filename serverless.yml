@@ -105,6 +105,10 @@ functions:
           path: /transaction/sign-and-submit
           method: post
           cors: true
+      - http:
+          path: /transaction/lifi
+          method: post
+          cors: true
 
 plugins:
   - serverless-offline

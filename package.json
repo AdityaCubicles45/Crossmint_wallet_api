@@ -14,17 +14,17 @@
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.803.0",
+    "@supabase/supabase-js": "^2.49.4",
     "aws-sdk": "^2.1550.0",
     "axios": "^1.9.0",
     "dotenv": "^16.4.5",
     "ethers": "^5.7.2",
     "serverless-dotenv-plugin": "^6.0.0",
-    "serverless-offline": "^13.3.3",
-    "@supabase/supabase-js": "^2.39.7"
+    "serverless-offline": "^13.3.3"
   },
   "devDependencies": {
-    "serverless": "^3.38.0",
-    "nodemon": "^3.0.3"
+    "nodemon": "^3.0.3",
+    "serverless": "^3.38.0"
   },
   "engines": {
     "node": ">=20.0.0"

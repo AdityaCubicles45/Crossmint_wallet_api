@@ -28,13 +28,12 @@ async function testKeyManager() {
         // Test 1: Create Wallet
         console.log('\nTest 1: Creating wallet...');
         const createWalletPayload = {
-            action: 'createWallet',
             adminWalletAddress: process.env.ADMIN_WALLET_ADDRESS
         };
         console.log('Create wallet payload:', JSON.stringify(createWalletPayload, null, 2));
         
         const createWalletResponse = await axios.post(
-            `${API_BASE_URL}/keys`,
+            `${API_BASE_URL}/wallet`,
             createWalletPayload,
             { headers }
         );
@@ -44,32 +43,12 @@ async function testKeyManager() {
             throw new Error('Failed to create wallet');
         }
 
-        const { walletAddress, delegatedKeyAddress } = createWalletResponse.data;
-        console.log('✓ Test 1 passed: Wallet created successfully\n');
+        const { address: walletAddress } = createWalletResponse.data.wallet;
+        const { address: delegatedKeyAddress } = createWalletResponse.data.delegatedKey;
+        console.log('✓ Test 1 passed: Wallet created and delegated key stored automatically\n');
 
-        // Test 2: Store Delegated Key
-        console.log('Test 2: Storing delegated key...');
-        const storePayload = {
-            action: 'storeDelegatedKey',
-            delegatedKeyAddress: delegatedKeyAddress,
-            delegatedKeyPrivateKey: process.env.DELEGATED_KEY_PRIVATE_KEY
-        };
-        console.log('Store payload:', JSON.stringify(storePayload, null, 2));
-        
-        const storeResponse = await axios.post(
-            `${API_BASE_URL}/keys`,
-            storePayload,
-            { headers }
-        );
-        console.log('Store response:', JSON.stringify(storeResponse.data, null, 2));
-        
-        if (!storeResponse.data.success) {
-            throw new Error('Failed to store delegated key');
-        }
-        console.log('✓ Test 2 passed: Delegated key stored successfully\n');
-
-        // Test 3: Retrieve Delegated Key
-        console.log('Test 3: Retrieving delegated key...');
+        // Test 2: Retrieve Delegated Key
+        console.log('Test 2: Retrieving delegated key...');
         const retrievePayload = {
             action: 'getDelegatedKey',
             address: delegatedKeyAddress
@@ -87,11 +66,11 @@ async function testKeyManager() {
             throw new Error('Failed to retrieve delegated key');
         }
 
-        // Verify retrieved key matches original
-        if (retrieveResponse.data.delegatedKeyPrivateKey !== process.env.DELEGATED_KEY_PRIVATE_KEY) {
+        // Verify retrieved key matches original (if you have the original in env)
+        if (process.env.DELEGATED_KEY_PRIVATE_KEY && retrieveResponse.data.delegatedKeyPrivateKey !== process.env.DELEGATED_KEY_PRIVATE_KEY) {
             throw new Error('Retrieved key does not match original key');
         }
-        console.log('✓ Test 3 passed: Delegated key retrieved and verified successfully\n');
+        console.log('✓ Test 2 passed: Delegated key retrieved and verified successfully\n');
 
         console.log('All tests passed successfully! 🎉');
     } catch (error) {

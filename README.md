@@ -5,7 +5,7 @@ A secure serverless wallet management service built with AWS Lambda, providing s
 ## Features
 
 - 🔐 Secure wallet creation and management
-- 🔑 Delegated key generation and storage
+- 🔑 Delegated key generation and storage (automatic)
 - 🔒 AWS KMS encryption for all sensitive data
 - 📦 Serverless architecture using AWS Lambda
 - 🔐 API key authentication
@@ -55,32 +55,33 @@ serverless deploy
 
 ### Key Management
 
-#### Create Wallet
+#### Create Wallet (delegated key is stored automatically)
 ```http
-POST /keys
+POST /wallet
 Content-Type: application/json
 x-api-key: your-api-key
 
 {
-    "action": "createWallet",
     "adminWalletAddress": "0x..."
 }
 ```
 
-#### Store Delegated Key
-```http
-POST /keys
-Content-Type: application/json
-x-api-key: your-api-key
-
+**Response:**
+```json
 {
-    "action": "storeDelegatedKey",
-    "delegatedKeyAddress": "0x...",
-    "delegatedKeyPrivateKey": "..."
+    "success": true,
+    "wallet": {
+        "address": "0x...",
+        "type": "evm-smart-wallet"
+    },
+    "delegatedKey": {
+        "address": "0x...",
+        "type": "evm-keypair"
+    }
 }
 ```
 
-#### Get Delegated Key
+#### Get Delegated Key (for internal use/testing only)
 ```http
 POST /keys
 Content-Type: application/json
@@ -100,9 +101,8 @@ node test.js
 ```
 
 The test suite verifies:
-1. Wallet creation
-2. Delegated key storage
-3. Key retrieval and verification
+1. Wallet creation (delegated key is stored automatically)
+2. Key retrieval and verification
 
 ## Security Features
 
