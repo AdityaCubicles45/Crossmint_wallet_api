@@ -1,6 +1,22 @@
-.env
+# Dependencies
 node_modules/
 .serverless/
-.vscode/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# IDE
 .idea/
-*.log 
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db 

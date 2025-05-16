@@ -8,12 +8,13 @@ provider:
   stage: ${opt:stage, 'dev'}
   region: ap-south-1
   environment:
-    CROSSMINT_API_KEY: sk_production_5uXEsxyFrxKi62DRV2Z8B2y9qTkGm1ZbGz1w7ygRgcrMVz2kPRHSwqQMxHMrw3U5UGBKVdCp2vqZ1HwJ4yBpfqkuP4tYXwXvut1prh726NgiMWnDC4kERejWZouk9pz4JCF4YoiWeL2Ctx3HGmw268mXA4kirkZSRTUNgx5YSxQaBU2sJAAyiJB7hYCE36fw3KpCGWbmf8TCM9oe2JsMp3s3
-    ADMIN_WALLET_ADDRESS: 0x64Cd524Ff27b0DA351E56c9d684fb50d47ae45C9
-    WALLET_ADDRESS: 0xaC97a2dA6aC62Bad4f63B43F7A823793EcFf7276
-    DELEGATED_KEY_ADDRESS: 0x64Cd524Ff27b0DA351E56c9d684fb50d47ae45C9
-    KMS_KEY_ID: 41501233-fbf5-4c9f-8467-25af7d035edc
-    KEYS_TABLE_NAME: Xade_Crossmint
+    CROSSMINT_API_KEY: ${env:CROSSMINT_API_KEY, 'sk_production_5uXEsxyFrxKi62DRV2Z8B2y9qTkGm1ZbGz1w7ygRgcrMVz2kPRHSwqQMxHMrw3U5UGBKVdCp2vqZ1HwJ4yBpfqkuP4tYXwXvut1prh726NgiMWnDC4kERejWZouk9pz4JCF4YoiWeL2Ctx3HGmw268mXA4kirkZSRTUNgx5YSxQaBU2sJAAyiJB7hYCE36fw3KpCGWbmf8TCM9oe2JsMp3s3'}
+    ADMIN_WALLET_ADDRESS: ${env:ADMIN_WALLET_ADDRESS, '0x64Cd524Ff27b0DA351E56c9d684fb50d47ae45C9'}
+    WALLET_ADDRESS: ${env:WALLET_ADDRESS, '0xaC97a2dA6aC62Bad4f63B43F7A823793EcFf7276'}
+    DELEGATED_KEY_ADDRESS: ${env:DELEGATED_KEY_ADDRESS, '0x64Cd524Ff27b0DA351E56c9d684fb50d47ae45C9'}
+    KMS_KEY_ID: ${env:KMS_KEY_ID, '41501233-fbf5-4c9f-8467-25af7d035edc'}
+    KEYS_TABLE_NAME: ${env:KEYS_TABLE_NAME, 'Xade_Crossmint'}
+    NODE_ENV: ${opt:stage, 'dev'}
   iam:
     role:
       statements:
@@ -35,6 +36,13 @@ provider:
             - kms:Encrypt
             - kms:DescribeKey
           Resource: arn:aws:kms:ap-south-1:124355643622:key/41501233-fbf5-4c9f-8467-25af7d035edc
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: 
+            - arn:aws:logs:ap-south-1:124355643622:log-group:/aws/lambda/*
 
 resources:
   Resources:
@@ -53,74 +61,49 @@ resources:
           SSEEnabled: true
 
 functions:
-  createWallet:
-    handler: handler.createWallet
-    name: ${self:service}-${self:provider.stage}-createWallet
+  api:
+    handler: api.handler
+    name: ${self:service}-${self:provider.stage}-api
     events:
       - http:
           path: /wallet
-          method: post
-          private: true
+          method: get
           cors: true
-
-  createTransaction:
-    handler: handler.createTransaction
-    name: ${self:service}-${self:provider.stage}-createTransaction
-    events:
       - http:
-          path: /transaction/create
+          path: /wallet
           method: post
-          private: true
           cors: true
-
-  signTransaction:
-    handler: handler.signTransaction
-    name: ${self:service}-${self:provider.stage}-signTransaction
-    events:
       - http:
-          path: /transaction/sign
-          method: post
-          private: true
+          path: /wallet/{address}
+          method: get
           cors: true
-
-  approveTransaction:
-    handler: handler.approveTransaction
-    name: ${self:service}-${self:provider.stage}-approveTransaction
-    events:
-      - http:
-          path: /transaction/approve
-          method: post
-          private: true
-          cors: true
-
-  submitTransactionToBlockchain:
-    handler: handler.submitTransactionToBlockchain
-    name: ${self:service}-${self:provider.stage}-submitTransactionToBlockchain
-    events:
-      - http:
-          path: /transactions/{transactionId}/submit
-          method: post
-          private: true
-          cors: true
-
-  keyManager:
-    handler: key-manager.handler
-    name: ${self:service}-${self:provider.stage}-keyManager
-    events:
-      - http:
-          path: /keys
-          method: post
-          private: true
-          cors: true
-
-  storeDelegatedKey:
-    handler: handler.storeDelegatedKey
-    name: ${self:service}-${self:provider.stage}-storeDelegatedKey
-    events:
       - http:
           path: /delegated-key
           method: post
-          private: true
+          cors: true
+      - http:
+          path: /delegated-key/{address}
+          method: get
+          cors: true
+      - http:
+          path: /transaction/create
+          method: post
+          cors: true
+      - http:
+          path: /transaction/sign
+          method: post
+          cors: true
+      - http:
+          path: /transactions/{transactionId}/submit
+          method: post
+          cors: true
+      - http:
+          path: /transactions/{transactionId}
+          method: get
+          cors: true
+      - http:
+          path: /transaction/sign-and-submit
+          method: post
           cors: true
 
 plugins:
@@ -129,7 +112,7 @@ plugins:
 
 custom:
   serverless-offline:
-    httpPort: 4000
-    lambdaPort: 4002
+    httpPort: 3000
+    lambdaPort: 3002
   dotenv:
-    path: .env.${opt:stage, 'dev'} 
+    path: .env 

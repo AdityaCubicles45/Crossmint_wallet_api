@@ -2,12 +2,15 @@
   "name": "xade-wallet-service",
   "version": "1.0.0",
   "description": "Smart wallet service with MetaMask integration",
-  "main": "handler.js",
+  "main": "api.js",
   "scripts": {
     "test": "node test-wallet.js && node test-transaction-flow.js && node test-metamask.js && node test-key-manager.js",
     "start": "serverless offline",
+    "start:dev": "serverless offline --stage dev",
+    "start:prod": "serverless offline --stage prod",
     "deploy": "serverless deploy",
-    "deploy:prod": "serverless deploy --stage prod"
+    "deploy:prod": "serverless deploy --stage prod",
+    "dev": "nodemon --watch '*.js' --exec 'npm run start:dev'"
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.803.0",
@@ -16,10 +19,12 @@
     "dotenv": "^16.4.5",
     "ethers": "^5.7.2",
     "serverless-dotenv-plugin": "^6.0.0",
-    "serverless-offline": "^13.3.3"
+    "serverless-offline": "^13.3.3",
+    "@supabase/supabase-js": "^2.39.7"
   },
   "devDependencies": {
-    "serverless": "^3.38.0"
+    "serverless": "^3.38.0",
+    "nodemon": "^3.0.3"
   },
   "engines": {
     "node": ">=20.0.0"
