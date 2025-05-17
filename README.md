@@ -1,178 +1,208 @@
-# Xade Wallet Service
+# Xade API Documentation
 
-A secure serverless wallet management service built with AWS Lambda, providing secure key storage and management capabilities.
+This API provides endpoints for managing wallets, transactions, and token swaps using Crossmint and Li.Fi integration.
 
-## Features
+## Setup
 
-- 🔐 Secure wallet creation and management
-- 🔑 Delegated key generation and storage (automatic)
-- 🔒 AWS KMS encryption for all sensitive data
-- 📦 Serverless architecture using AWS Lambda
-- 🔐 API key authentication
-- 💾 DynamoDB for secure key storage
+### Environment Variables
 
-## Prerequisites
-
-- Node.js 20.x or later
-- AWS CLI configured with appropriate credentials
-- Serverless Framework installed globally
-- An AWS account with appropriate permissions
-
-## Environment Variables
-
-Create a `.env.dev` file with the following variables:
+Create a `.env` file with the following variables:
 
 ```env
+NODE_ENV=development
+AWS_REGION=ap-south-1
 CROSSMINT_API_KEY=your_crossmint_api_key
-ADMIN_WALLET_ADDRESS=your_admin_wallet_address
-WALLET_ADDRESS=your_wallet_address
-DELEGATED_KEY_ADDRESS=your_delegated_key_address
 KMS_KEY_ID=your_kms_key_id
-KEYS_TABLE_NAME=your_dynamodb_table_name
-API_KEY=your_api_gateway_key
-DELEGATED_KEY_PRIVATE_KEY=your_delegated_key_private_key
-```
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd xade-wallet-service
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Deploy to AWS:
-```bash
-serverless deploy
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
+ADMIN_WALLET_ADDRESS=your_admin_wallet_address
 ```
 
 ## API Endpoints
 
-### Key Management
+### 1. Create Wallet
+Creates a new wallet with admin and delegated keys.
 
-#### Create Wallet (delegated key is stored automatically)
 ```http
 POST /wallet
-Content-Type: application/json
-x-api-key: your-api-key
+```
 
+Response:
+```json
 {
-    "adminWalletAddress": "0x..."
+    "success": true,
+    "adminWallet": {
+        "address": "0x...",
+        "privateKey": "..."
+    },
+    "wallet": {
+        "address": "0x...",
+        "crossmintWalletId": "..."
+    },
+    "delegatedKey": {
+        "address": "0x...",
+        "crossmintSignerId": "..."
+    }
 }
 ```
 
-**Response:**
+### 2. Get Wallet
+Retrieves wallet information.
+
+```http
+GET /wallet/{address}
+```
+
+Response:
 ```json
 {
     "success": true,
     "wallet": {
         "address": "0x...",
-        "type": "evm-smart-wallet"
-    },
-    "delegatedKey": {
-        "address": "0x...",
-        "type": "evm-keypair"
+        "type": "evm-smart-wallet",
+        "config": {
+            "adminSigner": {
+                "type": "evm-keypair",
+                "address": "0x..."
+            }
+        }
     }
 }
 ```
 
-#### Get Delegated Key (for internal use/testing only)
-```http
-POST /keys
-Content-Type: application/json
-x-api-key: your-api-key
+### 3. Create Li.Fi Transaction
+Creates a token swap transaction using Li.Fi.
 
+```http
+POST /transaction/lifi
+```
+
+Request Body:
+```json
 {
-    "action": "getDelegatedKey",
-    "address": "0x..."
+    "fromToken": "0x...",
+    "toToken": "0x...",
+    "amount": "1000000000000000000",
+    "fromAddress": "0x...",
+    "toAddress": "0x...",
+    "fromChain": "137",
+    "toChain": "137",
+    "slippage": 0.5
 }
 ```
 
-## Testing
-
-Run the test suite:
-```bash
-node test.js
+Response:
+```json
+{
+    "success": true,
+    "unsignedTx": {
+        "from": "0x...",
+        "to": "0x...",
+        "data": "0x...",
+        "value": "0x...",
+        "chainId": 137
+    },
+    "quote": {
+        "fromToken": {
+            "address": "0x...",
+            "symbol": "..."
+        },
+        "toToken": {
+            "address": "0x...",
+            "symbol": "..."
+        },
+        "fromAmount": "...",
+        "toAmount": "..."
+    }
+}
 ```
 
-The test suite verifies:
-1. Wallet creation (delegated key is stored automatically)
-2. Key retrieval and verification
+### 4. Sign and Submit Transaction
+Signs and submits a transaction to the blockchain.
 
-## Security Features
-
-- **AWS KMS Encryption**: All sensitive data is encrypted using AWS KMS
-- **API Key Authentication**: All endpoints require valid API key
-- **Secure Storage**: Keys are stored in DynamoDB with encryption
-- **Environment Variables**: Sensitive configuration is managed through environment variables
-- **IAM Roles**: Least privilege access through IAM roles
-
-## Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   API       │     │   Lambda    │     │   DynamoDB  │
-│  Gateway    │────▶│  Function   │────▶│   Table     │
-└─────────────┘     └─────────────┘     └─────────────┘
-       │                   │                   ▲
-       │                   │                   │
-       │                   ▼                   │
-       │            ┌─────────────┐           │
-       └───────────▶│    KMS      │───────────┘
-                    └─────────────┘
+```http
+POST /transaction/sign-and-submit
 ```
 
-## AWS Resources
+Request Body:
+```json
+{
+    "walletAddress": "0x...",
+    "unsignedTx": {
+        "from": "0x...",
+        "to": "0x...",
+        "data": "0x...",
+        "value": "0x...",
+        "chainId": 137
+    }
+}
+```
 
-- **Lambda Functions**:
-  - `keyManager`: Main key management function
-  - `createWallet`: Wallet creation function
-  - `storeDelegatedKey`: Delegated key storage function
+Response:
+```json
+{
+    "success": true,
+    "txHash": "0x...",
+    "txResponse": {
+        "hash": "0x...",
+        "from": "0x...",
+        "to": "0x...",
+        "value": "0x..."
+    }
+}
+```
 
-- **DynamoDB**:
-  - Table: `Xade_Crossmint`
-  - Primary Key: `address` (String)
+## Postman Setup
 
-- **KMS**:
-  - Customer managed key for encryption
+1. Create a new collection in Postman
+2. Add the following environment variables:
+   - `base_url`: Your API base URL
+   - `crossmint_api_key`: Your Crossmint API key
 
-- **API Gateway**:
-  - REST API with API key authentication
-  - Private endpoints
+3. Add the following headers to all requests:
+   ```
+   Content-Type: application/json
+   x-api-key: {{crossmint_api_key}}
+   ```
 
-## Error Handling
+4. Create requests for each endpoint:
+   - Create Wallet: `POST {{base_url}}/wallet`
+   - Get Wallet: `GET {{base_url}}/wallet/{address}`
+   - Create Li.Fi Transaction: `POST {{base_url}}/transaction/lifi`
+   - Sign and Submit Transaction: `POST {{base_url}}/transaction/sign-and-submit`
 
-The service includes comprehensive error handling:
-- Input validation
-- API key verification
-- KMS encryption/decryption errors
-- DynamoDB operation errors
-- Proper error responses with status codes
+## Production Considerations
 
-## Logging
+1. **Security**:
+   - Always use HTTPS in production
+   - Keep API keys and private keys secure
+   - Use environment variables for sensitive data
+   - Implement rate limiting
+   - Add request validation
 
-- CloudWatch Logs for all Lambda functions
-- Detailed error logging
-- Request/response logging
-- Operation status logging
+2. **Monitoring**:
+   - Set up logging and monitoring
+   - Track transaction statuses
+   - Monitor wallet balances
+   - Set up alerts for failed transactions
 
-## Contributing
+3. **Error Handling**:
+   - Implement proper error responses
+   - Add retry mechanisms for failed transactions
+   - Handle network issues gracefully
 
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+4. **Performance**:
+   - Use caching where appropriate
+   - Optimize database queries
+   - Consider using a CDN for static content
 
-## License
+## Development vs Production
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+The API automatically switches between development and production environments based on the `NODE_ENV` variable:
+
+- Development: Uses Polygon Amoy testnet
+- Production: Uses Polygon mainnet
 
 ## Support
 
-For support, please open an issue in the repository or contact the development team. 
+For any issues or questions, please contact the development team. 
