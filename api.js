@@ -1,4 +1,6 @@
-const AWS = require('aws-sdk');
+const { KMSClient, EncryptCommand, DecryptCommand } = require('@aws-sdk/client-kms');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
 const axios = require('axios');
 const { ethers } = require('ethers');
 const crypto = require('crypto');
@@ -31,13 +33,15 @@ const environment = process.env.NODE_ENV || 'development';
 const currentConfig = config[environment];
 
 // Initialize AWS services
-const kms = new AWS.KMS({
+const kmsClient = new KMSClient({
     region: process.env.AWS_REGION || 'ap-south-1'
 });
 
-const dynamoDB = new AWS.DynamoDB.DocumentClient({
+const dynamoClient = new DynamoDBClient({
     region: process.env.AWS_REGION || 'ap-south-1'
 });
+
+const dynamoDB = DynamoDBDocumentClient.from(dynamoClient);
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
@@ -149,7 +153,7 @@ const createResponse = (statusCode, data) => ({
 class KeyManager {
     constructor() {
         this.tableName = process.env.SUPABASE_WALLETS_TABLE || 'wallets';
-        this.kms = new AWS.KMS({ region: process.env.AWS_REGION });
+        this.kmsClient = kmsClient;
         log('info', 'KeyManager initialized', { tableName: this.tableName });
     }
 
@@ -159,7 +163,8 @@ class KeyManager {
                 KeyId: process.env.KMS_KEY_ID,
                 Plaintext: Buffer.from(plaintext)
             };
-            const result = await this.kms.encrypt(params).promise();
+            const command = new EncryptCommand(params);
+            const result = await kmsClient.send(command);
             return result.CiphertextBlob.toString('base64');
         } catch (error) {
             log('error', 'Error encrypting with KMS', { error: error.message });
@@ -172,7 +177,8 @@ class KeyManager {
             const params = {
                 CiphertextBlob: Buffer.from(ciphertextBase64, 'base64')
             };
-            const result = await this.kms.decrypt(params).promise();
+            const command = new DecryptCommand(params);
+            const result = await kmsClient.send(command);
             return result.Plaintext.toString('utf8');
         } catch (error) {
             log('error', 'Error decrypting with KMS', { error: error.message });
@@ -963,4 +969,4 @@ exports.handler = async (event) => {
             error: 'Internal Server Error'
         });
     }
-}; 
+};
