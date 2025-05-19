@@ -6,11 +6,11 @@
   "scripts": {
     "test": "node test-wallet.js && node test-transaction-flow.js && node test-metamask.js && node test-key-manager.js",
     "start": "node server.js",
+    "dev": "nodemon server.js",
     "start:dev": "serverless offline --stage dev",
     "start:prod": "serverless offline --stage prod",
     "deploy": "serverless deploy",
-    "deploy:prod": "serverless deploy --stage prod",
-    "dev": "nodemon --watch '*.js' --exec 'npm run start:dev'"
+    "deploy:prod": "serverless deploy --stage prod"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.812.0",
