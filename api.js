@@ -1,6 +1,7 @@
 const { KMSClient, EncryptCommand, DecryptCommand } = require('@aws-sdk/client-kms');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+const express = require('express');
 const axios = require('axios');
 const { ethers } = require('ethers');
 const crypto = require('crypto');
@@ -970,3 +971,47 @@ exports.handler = async (event) => {
         });
     }
 };
+
+// Create Express app
+const app = express();
+app.use(express.json());
+
+// Convert serverless handler to Express middleware
+app.use(async (req, res) => {
+    // Convert Express request to serverless event
+    const event = {
+        httpMethod: req.method,
+        path: req.path,
+        headers: req.headers,
+        queryStringParameters: req.query,
+        body: JSON.stringify(req.body),
+        pathParameters: req.params
+    };
+
+    try {
+        // Call the serverless handler
+        const result = await handler(event);
+        
+        // Set response headers
+        Object.entries(result.headers || {}).forEach(([key, value]) => {
+            res.set(key, value);
+        });
+
+        // Send response
+        res.status(result.statusCode).send(result.body);
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal Server Error'
+        });
+    }
+});
+
+// Start server
+const PORT = 3000;
+const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+
+app.listen(PORT, HOST, () => {
+    console.log(`Server is running on http://${HOST}:${PORT}`);
+});
